@@ -1,22 +1,33 @@
 # HAPI FHIR Server - Localización Chile (CL Core)
 
-Este proyecto despliega un servidor HAPI FHIR optimizado para la Guía de Implementación (IG) de Chile. Para maximizar la estabilidad, utilizamos un enfoque de **Infraestructura Limpia + Inyección de Datos**.
+Este repositorio contiene la configuración para desplegar un servidor **HAPI FHIR** basado en **Java 21**, optimizado para la **Guía de Implementación Core-CL**.
 
----
+## 🚀 Guía de Despliegue Rápido
 
-## 🏗️ 1. Construcción de la Imagen
-Compilamos el servidor usando **Java 21**. Esta versión es ligera y no incluye la descarga automática de la IG para evitar fallos críticos en el arranque (Error 502).
+Siga estos pasos en orden cronológico para levantar el servidor e inyectar los perfiles de Chile.
+
+### 1. Preparación del Entorno
+Clone el repositorio y prepare la carpeta donde residirán los recursos de la IG.
+
+```bash
+git clone [https://github.com/com/CarlosValdebenito/hapi-fhir-chile.git](https://github.com/CarlosValdebenito/hapi-fhir-chile.git)
+cd hapi-fhir-cl
+```
+2. Descarga de la IG Chile (CL Core)Descargamos y descomprimimos la versión 1.9.3 de la Guía de Implementación manualmente para asegurar la integridad de los archivos.Bash# Descargar paquete oficial
+
+```bash
+mkdir -p core-cl
+curl -L [https://hl7chile.cl/fhir/ig/clcore/1.9.3/package.tgz](https://hl7chile.cl/fhir/ig/clcore/1.9.3/package.tgz) -o package.tgz
+tar -xvzf package.tgz -C ./package --strip-components=1
+rm package.tgz
+```
+
+3. Construcción y Lanzamiento (Docker)Construimos la imagen limpia (sin dependencias externas de red al arrancar) para evitar errores 502.Bash# Construir imagen
 
 ```bash
 docker build -t hapi-chile .
-```
 
----
-
-## 🚀 2. Despliegue del Contenedor
-Ejecutamos el motor FHIR. Hemos configurado una base de datos en memoria y límites de RAM para asegurar que funcione en entornos de recursos limitados como Killercoda.
-
-```bash
+# Lanzar contenedor con base de datos H2 en memoria
 docker run -d -p 8080:8080 --name hapi-test \
   -e "spring.datasource.url=jdbc:h2:mem:testdb" \
   -e "hapi.fhir.allow_external_references=true" \
@@ -24,28 +35,39 @@ docker run -d -p 8080:8080 --name hapi-test \
   hapi-chile
 ```
 
-> **Validación:** Verifica que el servidor responda en `http://localhost:8080` antes de pasar al siguiente paso.
+Nota: Espere aproximadamente 2-3 minutos a que el servidor inicialice. 
+Puede monitorear el progreso con 
 
----
+```bash
+docker logs -f hapi-test.4
+```
 
-## 🇨🇱 3. Carga de la Guía de Chile (CL Core)
-Una vez que el motor está "Up", inyectamos los recursos de la IG Core-CL. Este método permite identificar errores específicos en archivos JSON sin que el servidor se caiga.
+4. Inyección Masiva de Recursos (Script de Carga)Una vez que el servidor responda en el puerto 8080, ejecute este script para cargar los perfiles, ValueSets y CodeSystems de Chile mediante la API REST.Bash# Instalar jq para procesar los IDs de los recursos
 
-### Ejecución desde la terminal (Bash)
-Asegúrate de tener los archivos JSON en una carpeta llamada `/package` y ejecuta este loop:
+```bash
+sudo apt update && sudo apt install jq -y
+```
+
+**Ejecutar carga masiva vía PUT**
 
 ```bash
 for f in ./package/*.json; do
-  # Extraemos Tipo e ID del recurso usando jq
   RES_TYPE=$(jq -r '.resourceType' "$f")
   RES_ID=$(jq -r '.id' "$f")
   
-  echo "Cargando: $RES_TYPE/$RES_ID"
-  
-  # Inyección vía API REST (PUT)
-  curl -X PUT "http://localhost:8080/fhir/$RES_TYPE/$RES_ID" \
-       -H "Content-Type: application/json" \
-       --data-binary @"$f"
+  if [ "$RES_TYPE" != "null" ] && [ "$RES_ID" != "null" ]; then
+    echo "Cargando: $RES_TYPE/$RES_ID"
+    curl -X PUT "http://localhost:8080/fhir/$RES_TYPE/$RES_ID" \
+         -H "Content-Type: application/json" \
+         --data-binary @"$f"
+  fi
 done
 ```
 
+🛠️ Solución de Problemas (Troubleshooting)ProblemaCausa ProbableSoluciónError 502 Bad Gateway
+El servidor aún está arrancando o se quedó sin RAM.
+Revisar docker logs hapi-test. Esperar 2 min.Contenedor detenido
+Error en el JpaPackageCache o falta de memoria.
+Asegurarse de NO incluir la descarga de la IG en el Dockerfile.
+Error 400 en el ScriptRecurso JSON mal formado o falta de dependencias.
+El script continuará con el siguiente recurso. Revisar el ID fallido.
