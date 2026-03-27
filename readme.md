@@ -7,6 +7,10 @@ Este repositorio contiene la configuración para desplegar un servidor **HAPI FH
 Siga estos pasos en orden cronológico para levantar el servidor e inyectar los perfiles de Chile.
 
 ### 1. Preparación del Entorno
+Se requiere:
+ - Java 21 o +
+ - Maven 3.9.14 o +
+
 Clone el repositorio y prepare la carpeta donde residirán los recursos de la IG.
 
 ```bash
